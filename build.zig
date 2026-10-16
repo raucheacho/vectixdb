@@ -17,6 +17,10 @@ pub fn build(b: *std.Build) void {
         .linkage = .static,
         .root_module = mod,
     });
+    // Linked by foreign toolchains (cgo, gcc): carry the compiler runtime
+    // (e.g. __zig_probe_stack on x86_64 Linux). Not on macOS, where Apple's
+    // linker rejects the bundled member and nothing from it is needed.
+    lib.bundle_compiler_rt = !target.result.os.tag.isDarwin();
     b.installArtifact(lib);
     lib.installHeader(b.path("include/vectixdb.h"), "vectixdb.h");
 
