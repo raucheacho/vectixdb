@@ -7,10 +7,10 @@ go 1.24.0
 // replace directives serve development in this repository and are ignored
 // by the projects that depend on the binding.
 require (
-	github.com/raucheacho/vectixdb/bindings/go/lib/darwin_amd64 v0.0.0
-	github.com/raucheacho/vectixdb/bindings/go/lib/darwin_arm64 v0.0.0
-	github.com/raucheacho/vectixdb/bindings/go/lib/linux_amd64 v0.0.0
-	github.com/raucheacho/vectixdb/bindings/go/lib/linux_arm64 v0.0.0
+	github.com/raucheacho/vectixdb/bindings/go/lib/darwin_amd64 v0.1.0
+	github.com/raucheacho/vectixdb/bindings/go/lib/darwin_arm64 v0.1.0
+	github.com/raucheacho/vectixdb/bindings/go/lib/linux_amd64 v0.1.0
+	github.com/raucheacho/vectixdb/bindings/go/lib/linux_arm64 v0.1.0
 )
 
 replace (
