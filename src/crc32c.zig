@@ -69,12 +69,11 @@ inline fn step8(crc: u32, v: u8) u32 {
               [v] "r" (@as(u32, v)),
         );
     }
-    var c: u32 = crc;
-    asm ("crc32b %[v], %[c]"
-        : [c] "+r" (c),
-        : [v] "r" (v),
-    );
-    return c;
+    // At most 7 tail bytes: the table, since Zig's x86_64 backend (Debug)
+    // cannot encode crc32b.
+    var s: std.hash.crc.Crc32Iscsi = .{ .crc = crc };
+    s.update(&.{v});
+    return s.crc;
 }
 
 test "matches the reference on every length and split" {
