@@ -24,5 +24,8 @@ First version: phase 1 of the specification.
 - C API (`include/vectixdb.h`, API 0.1), Go binding, `vectix` command line tool.
 - Static libraries for macOS (arm64, x86-64) and Linux glibc (arm64, x86-64) with the compiler runtime bundled where needed (on x86-64 macOS, repacked so Apple's linker reads it).
 - Build options `-Dstrip` (no debug info) and `-Dshared` (shared library).
+- Distribution without Zig:
+  - release archives per platform: header, static and shared libraries, pkg-config file, `vectix`;
+  - the Go module carries its header and, in release tags, the prebuilt static library of each platform in its own module (`bindings/go/lib/<platform>`).
 
 Formats: WAL version 1, manifest version 1, collection snapshot version 1.

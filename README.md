@@ -38,7 +38,23 @@ Used by Lorag (a local memory for AI agents) through the Go binding.
 - **Read-only opens.** They write no byte.
 - **One writer.** One process opens a database for writing, enforced with a lock on `<dir>/LOCK`. Read-only opens share the lock with each other, but not with a writer: while a writer has the database open, they fail with `VTX_E_LOCKED`.
 
-## Quick start
+## Installing
+
+Releases need no Zig. Platforms: macOS 13+ (arm64, x86-64), Linux with glibc 2.28+ (arm64, x86-64).
+
+- **Go:** `go get github.com/raucheacho/vectixdb/bindings/go@v0.1.0`. The module carries the prebuilt static libraries ([docs/GO.md](docs/GO.md)).
+- **C, C++ or FFI:** one archive per platform on the [releases page](https://github.com/raucheacho/vectixdb/releases), `vectixdb-<version>-<os>-<arch>.tar.gz`:
+  - the header, `include/vectixdb.h`;
+  - the static library `lib/libvectixdb.a` (recommended);
+  - the shared library, for FFI;
+  - `lib/pkgconfig/vectixdb.pc`;
+  - the `vectix` tool.
+
+  See [docs/INTEGRATION.md](docs/INTEGRATION.md#building-and-shipping).
+
+While the repository is private, download with `gh release download v0.1.0 -R raucheacho/vectixdb`, and give Go access as described in [docs/GO.md](docs/GO.md#installing).
+
+## Building from source
 
 Requirements: [Zig 0.16](https://ziglang.org/download/).
 
@@ -46,13 +62,10 @@ Requirements: [Zig 0.16](https://ziglang.org/download/).
 zig build test -Drelease      # unit, crash-recovery and C API tests
 zig build -Drelease           # zig-out/lib/libvectixdb.a, zig-out/include/vectixdb.h, zig-out/bin/vectix
 zig build c-test              # builds and runs tests/c/smoke.c against the header
+./scripts/go-libs.sh          # static library of the Go binding, for the host
 ```
 
 ### From Go
-
-```sh
-./scripts/go-libs.sh          # static library for the host, into bindings/go/lib/<os_arch>/
-```
 
 ```go
 import vectixdb "github.com/raucheacho/vectixdb/bindings/go"

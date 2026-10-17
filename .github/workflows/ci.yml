@@ -41,7 +41,8 @@ jobs:
           version: 0.16.0
       - run: zig build test -Dtsan --summary all
 
-  # Static libraries for every platform the Go binding supports.
+  # Release artifacts for every platform: the Go binding's static libraries
+  # and the C archives (static and shared library, CLI).
   cross:
     runs-on: ubuntu-latest
     steps:
@@ -53,4 +54,7 @@ jobs:
         with:
           go-version: '1.24'
           cache: false
-      - run: ./scripts/go-libs.sh darwin_arm64 darwin_amd64 linux_amd64 linux_arm64
+      - name: The Go binding carries the same header
+        run: cmp include/vectixdb.h bindings/go/include/vectixdb.h
+      - run: STRIP=1 ./scripts/go-libs.sh all
+      - run: ./scripts/dist.sh "$(sed -n 's/^ *\.version = "\(.*\)",/\1/p' build.zig.zon)"

@@ -190,15 +190,52 @@ Include the **model name** in the fingerprint, not only the dimension: two model
 
 ## Building and shipping
 
-| Target | Library |
+### Release archives
+
+Each release has one archive per platform, built with `scripts/dist.sh`:
+
+```
+vectixdb-0.1.0-linux-amd64/
+  include/vectixdb.h
+  lib/libvectixdb.a                  static, recommended
+  lib/libvectixdb.so.0.1.0, .so.0, .so (macOS: libvectixdb.0.1.0.dylib, .0.dylib, .dylib)
+  lib/pkgconfig/vectixdb.pc
+  bin/vectix
+  LICENSE  NOTICE  README.md  CHANGELOG.md
+```
+
+**Static linking**, the simplest to ship: the application has no runtime dependency on VectixDB. Name the archive explicitly, since `-lvectixdb` would pick the shared library:
+
+```sh
+cc app.c -I vectixdb/include vectixdb/lib/libvectixdb.a -lpthread -lm   # Linux
+cc app.c -I vectixdb/include vectixdb/lib/libvectixdb.a                  # macOS
+```
+
+On Linux, `-lpthread` is required with glibc before 2.34 (Debian 11, Ubuntu 20.04, RHEL 8), where threads live in their own library. `pkg-config --libs --static vectixdb` lists these flags.
+
+**Shared library**, for FFI (Python `ctypes`, Node, Ruby...) or several programs sharing one copy:
+
+```sh
+export PKG_CONFIG_PATH=$PWD/vectixdb/lib/pkgconfig
+cc app.c $(pkg-config --cflags --libs vectixdb) -Wl,-rpath,$PWD/vectixdb/lib
+```
+
+The macOS library's install name is `@rpath/libvectixdb.dylib` and the Linux soname is `libvectixdb.so.0`: give the program an rpath, or install the library in a system directory.
+
+**Licenses.** VectixDB is Apache-2.0. A product that ships it, in source or binary form, includes `LICENSE` and `NOTICE`.
+
+### Platforms
+
+| Target | Notes |
 | --- | --- |
-| macOS arm64, macOS x86-64 (13+) | `libvectixdb.a`; on x86-64, compiler runtime bundled (build with `scripts/go-libs.sh`, which repacks the archive for Apple's linker) |
-| Linux arm64, Linux x86-64 (glibc) | `libvectixdb.a`, compiler runtime bundled; link with `-lm` |
-| Windows x86-64 | not supported yet: the engine does not compile for Windows |
+| macOS arm64, macOS x86-64 (13+) | On x86-64, the static library carries the compiler runtime, repacked for Apple's linker |
+| Linux arm64, Linux x86-64 (glibc 2.28+) | The static library carries the compiler runtime; link with `-lpthread -lm` |
+| Windows x86-64 | Not supported yet: the engine does not compile for Windows |
 
 - **x86-64 CPUs.** The libraries target x86-64-v2 (CPUs from 2009 onwards) for the hardware CRC32C.
-- **Release builds** use `-Drelease` (ReleaseSafe: safety checks stay on).
-- **Go applications:** see [GO.md](GO.md) for the module setup, cross-compiling and a Docker build.
+- **musl (Alpine).** Not shipped: build from source with `-Dtarget=x86_64-linux-musl`.
+- **Release builds** use `-Drelease` (ReleaseSafe: safety checks stay on) and `-Dstrip`.
+- **Go applications:** see [GO.md](GO.md) for the module, cross-compiling and Docker.
 
 ## Limits
 
