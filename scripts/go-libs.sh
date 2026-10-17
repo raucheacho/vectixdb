@@ -20,5 +20,14 @@ for platform in "$@"; do
     esac
     zig build -Drelease -Dtarget="$target" -Dcpu="$cpu" --prefix "bindings/go/lib/$platform"
     rm -rf "bindings/go/lib/$platform/include"
+    if [ "$platform" = darwin_amd64 ]; then
+        # The archive carries compiler_rt (__zig_probe_stack) but Zig leaves
+        # its members misaligned, and Apple's linker then skips them all.
+        # Repack it in the Darwin format.
+        lib="$PWD/bindings/go/lib/$platform/lib/libvectixdb.a"
+        tmp=$(mktemp -d)
+        (cd "$tmp" && zig ar x "$lib" && chmod 644 ./*.o && rm -f "$lib" && zig ar rcs --format=darwin "$lib" ./*.o)
+        rm -rf "$tmp"
+    fi
     echo "built bindings/go/lib/$platform"
 done

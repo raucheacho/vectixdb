@@ -4,12 +4,17 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .ReleaseSafe });
 
+    // Release artifacts drop debug info: it is most of the static library.
+    const strip = b.option(bool, "strip", "Omit debug info from the library and the CLI");
+    const shared = b.option(bool, "shared", "Also build the shared library") orelse false;
+
     const mod = b.addModule("vectixdb", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
         .pic = true,
+        .strip = strip,
     });
 
     const lib = b.addLibrary(.{
@@ -18,11 +23,22 @@ pub fn build(b: *std.Build) void {
         .root_module = mod,
     });
     // Linked by foreign toolchains (cgo, gcc): carry the compiler runtime
-    // (e.g. __zig_probe_stack on x86_64 Linux). Not on macOS, where Apple's
+    // (e.g. __zig_probe_stack on x86_64). Not on arm64 macOS, where Apple's
     // linker rejects the bundled member and nothing from it is needed.
-    lib.bundle_compiler_rt = !target.result.os.tag.isDarwin();
+    lib.bundle_compiler_rt = !(target.result.os.tag.isDarwin() and target.result.cpu.arch == .aarch64);
     b.installArtifact(lib);
     lib.installHeader(b.path("include/vectixdb.h"), "vectixdb.h");
+
+    // For FFI users (Python, Node, ...) that load the library at run time.
+    if (shared) {
+        const dylib = b.addLibrary(.{
+            .name = "vectixdb",
+            .linkage = .dynamic,
+            .root_module = mod,
+            .version = std.SemanticVersion.parse(@import("build.zig.zon").version) catch unreachable,
+        });
+        b.installArtifact(dylib);
+    }
 
     // A C program linked against the static library, to check the header.
     const smoke = b.addExecutable(.{
@@ -42,6 +58,7 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/cli.zig"),
             .target = target,
             .optimize = optimize,
+            .strip = strip,
             .imports = &.{.{ .name = "vectixdb", .module = mod }},
         }),
     });
