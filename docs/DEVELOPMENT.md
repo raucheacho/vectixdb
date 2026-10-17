@@ -216,8 +216,8 @@ Every file starts with a magic and a `u32` version. Until 1.0, a new version may
 2. After durability changes, the mutation table above was re-checked.
 3. Bump the version in `build.zig.zon` and in `src/root.zig` (`vtx_version`); `scripts/dist.sh` refuses a tag that differs from either.
 4. A change to `include/vectixdb.h` is copied to `bindings/go/include/vectixdb.h` (CI checks it).
-5. Add a CHANGELOG entry: format versions, API changes, migration notes.
-6. Push the tag: `git tag vX.Y.Z && git push origin vX.Y.Z`. [release.yml](../.github/workflows/release.yml) then:
+5. Add a CHANGELOG entry, dated: format versions, API changes, migration notes.
+6. Merge `develop` into `main`, then tag `main`: `git tag -a vX.Y.Z -m "VectixDB X.Y.Z" && git push origin vX.Y.Z`. [release.yml](../.github/workflows/release.yml) then:
    - builds the archives of every platform and runs the tests;
    - links a C program statically and dynamically against each archive and runs the CLI, on Linux x86-64, Linux arm64 and macOS;
    - runs `scripts/release-go.sh`, which commits the four Go libraries outside any branch, and pushes the tags `bindings/go/vX.Y.Z` and `bindings/go/lib/<platform>/vX.Y.Z`;
