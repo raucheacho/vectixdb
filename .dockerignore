@@ -1,4 +1,5 @@
 .zig-cache/
 zig-out/
-bindings/go/lib/
+bindings/go/lib/*/*.a
+dist/
 .git/

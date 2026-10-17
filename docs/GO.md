@@ -2,39 +2,62 @@
 
 Package `github.com/raucheacho/vectixdb/bindings/go` (import it as `vectixdb`). It is a thin cgo wrapper over the C API: the same calls, Go types, no logic of its own.
 
-## The static library is not in the module
-
-The package links `bindings/go/lib/<os>_<arch>/lib/libvectixdb.a`. The library is built with Zig and is not committed (it is in `.gitignore`). So `go get` alone is not enough: the consuming project needs a checkout of this repository and the library built for each target platform.
+## Installing
 
 ```sh
-./scripts/go-libs.sh                              # host platform
-./scripts/go-libs.sh linux_amd64 linux_arm64      # cross-compiled with Zig, from any OS
+go get github.com/raucheacho/vectixdb/bindings/go@v0.1.0
 ```
 
-Supported: `darwin_arm64`, `darwin_amd64` (macOS 13+), `linux_amd64`, `linux_arm64` (glibc). Windows is not supported yet.
+Releases carry the prebuilt static library of every supported platform, so a build needs a C compiler for cgo but not Zig. Supported: `darwin_arm64`, `darwin_amd64` (macOS 13+), `linux_amd64`, `linux_arm64` (glibc). Windows is not supported yet.
 
-## Using it from a project
+While the repository is private, tell Go to fetch it directly with your git credentials:
 
-Keep the checkout next to the project and point the module at it:
+```sh
+go env -w GOPRIVATE=github.com/raucheacho/*
+git config --global url."git@github.com:".insteadOf "https://github.com/"   # or a token in ~/.netrc
+```
+
+### How the module is laid out
+
+- **The header** is in the module (`bindings/go/include/vectixdb.h`), a copy of `include/vectixdb.h` that CI keeps identical.
+- **The libraries** are one module per platform, `bindings/go/lib/<goos>_<goarch>`, which the binding imports on that platform only. Their `libvectixdb.a` is never on a branch: `scripts/release-go.sh` adds the four libraries in a release commit and tags it `bindings/go/v<version>` and `bindings/go/lib/<platform>/v<version>`. `go get` downloads the four (about 4.5 MB in all).
+- **`go mod vendor`** drops the `.a` files (they are not Go files); do not vendor the binding.
+
+### Working from a checkout
+
+To use unreleased changes, or to change the engine, point the application at a checkout. Every module needs a `replace`, since those of the binding's own `go.mod` do not apply to the application:
 
 ```
 // go.mod of the application
 require github.com/raucheacho/vectixdb/bindings/go v0.0.0
-replace github.com/raucheacho/vectixdb/bindings/go => ../vectixdb/bindings/go
+
+replace (
+	github.com/raucheacho/vectixdb/bindings/go => ../vectixdb/bindings/go
+	github.com/raucheacho/vectixdb/bindings/go/lib/darwin_amd64 => ../vectixdb/bindings/go/lib/darwin_amd64
+	github.com/raucheacho/vectixdb/bindings/go/lib/darwin_arm64 => ../vectixdb/bindings/go/lib/darwin_arm64
+	github.com/raucheacho/vectixdb/bindings/go/lib/linux_amd64 => ../vectixdb/bindings/go/lib/linux_amd64
+	github.com/raucheacho/vectixdb/bindings/go/lib/linux_arm64 => ../vectixdb/bindings/go/lib/linux_arm64
+)
+```
+
+Then build the library with Zig 0.16:
+
+```sh
+./scripts/go-libs.sh                              # host platform
+./scripts/go-libs.sh linux_amd64 linux_arm64      # cross-compiled, from any OS
+./scripts/go-libs.sh all                          # every platform; STRIP=1 drops debug info, as releases do
 ```
 
 Lorag works this way, with a `Makefile` rule that builds the library when it is missing:
 
 ```make
 VECTIXDB ?= ../vectixdb
-ENGINE_LIB = $(VECTIXDB)/bindings/go/lib/$(shell go env GOOS)_$(shell go env GOARCH)/lib/libvectixdb.a
+ENGINE_LIB = $(VECTIXDB)/bindings/go/lib/$(shell go env GOOS)_$(shell go env GOARCH)/libvectixdb.a
 $(ENGINE_LIB):
 	$(VECTIXDB)/scripts/go-libs.sh
 build: $(ENGINE_LIB)
 	CGO_ENABLED=1 go build ./...
 ```
-
-While the repository is private, CI jobs check it out with a token (see [CI](#ci)).
 
 ## API
 
@@ -88,32 +111,23 @@ go test -race ./...
 go test -bench . -run ^$ ./...        # BenchmarkHybridSearch
 ```
 
-The tests run against the library of the host platform: build it first with `scripts/go-libs.sh`.
+In a checkout, the tests run against the library of the host platform: build it first with `scripts/go-libs.sh`.
 
 ## Cross-compiling an application
 
-cgo needs a C toolchain for the target. Zig provides one for every platform, which avoids installing cross compilers:
-
-```sh
-./scripts/go-libs.sh linux_amd64
-CGO_ENABLED=1 GOOS=linux GOARCH=amd64 CC="zig cc -target x86_64-linux-gnu" go build ./cmd/app
-```
-
-Use the same target as the library: `x86_64-linux-gnu`, `aarch64-linux-gnu`, `aarch64-macos`, `x86_64-macos`.
+cgo needs a C toolchain for the target:
+- **Linux** from any OS: Zig provides one, `CGO_ENABLED=1 GOOS=linux GOARCH=amd64 CC="zig cc -target x86_64-linux-gnu.2.28" go build ./cmd/app` (glibc 2.28: Debian 10, Ubuntu 20.04, RHEL 8 and later). Use `aarch64-linux-gnu.2.28` for arm64.
+- **macOS** on macOS only, with Apple's clang (`CC="clang -arch x86_64"` for Intel from Apple silicon): the Go runtime links Apple frameworks, which Zig does not provide.
 
 ## Docker
 
-The library links against glibc: use a Debian or Ubuntu based image, not Alpine (musl). Pass the checkout as a named build context:
+The library links against glibc: use a Debian or Ubuntu based image, not Alpine (musl). With a released version, the image needs nothing more than Go and a C compiler:
 
 ```dockerfile
 FROM golang:1.24-bookworm AS build
-ARG ZIG_VERSION=0.16.0
-RUN apt-get update && apt-get install -y --no-install-recommends xz-utils \
- && curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-$(uname -m)-linux-${ZIG_VERSION}.tar.xz" | tar -xJ -C /opt \
- && ln -s "/opt/zig-$(uname -m)-linux-${ZIG_VERSION}/zig" /usr/local/bin/zig
-COPY --from=vectixdb . /src/vectixdb
-RUN cd /src/vectixdb && rm -rf zig-out .zig-cache bindings/go/lib && ./scripts/go-libs.sh
 WORKDIR /src/app
+COPY go.mod go.sum ./
+RUN go mod download
 COPY . .
 RUN CGO_ENABLED=1 go build -o /out/app ./cmd/app
 
@@ -121,29 +135,19 @@ FROM debian:bookworm-slim
 COPY --from=build /out/app /usr/local/bin/app
 ```
 
-```sh
-docker build --build-context vectixdb=../vectixdb -t app .
-```
-
-Lorag's [Dockerfile](https://github.com/raucheacho/lorag/blob/main/Dockerfile) is a complete example.
+While the repository is private, `go mod download` needs credentials in the image: pass a token as a build secret rather than an argument. From a checkout instead, pass it as a named build context (`docker build --build-context vectixdb=../vectixdb`) and build the library in the image with Zig: Lorag's [Dockerfile](https://github.com/raucheacho/lorag/blob/main/Dockerfile) does this.
 
 ## CI
 
-A job that builds an application against this repository:
+With a released version, a CI job needs Go only. While the repository is private, give it read access:
 
 ```yaml
 - uses: actions/checkout@v4
-  with: { path: app }
-- uses: actions/checkout@v4
-  with:
-    repository: raucheacho/vectixdb
-    token: ${{ secrets.VECTIXDB_TOKEN }}   # needed while the repository is private
-    path: vectixdb
-- uses: mlugg/setup-zig@v2
-  with: { version: 0.16.0 }
 - uses: actions/setup-go@v5
-  with: { go-version-file: app/go.mod }
-- run: ./vectixdb/scripts/go-libs.sh
+  with: { go-version-file: go.mod }
+- run: git config --global url."https://x-access-token:${{ secrets.VECTIXDB_TOKEN }}@github.com/".insteadOf "https://github.com/"
 - run: go test -race ./...
-  working-directory: app
+  env: { GOPRIVATE: github.com/raucheacho/* }
 ```
+
+`VECTIXDB_TOKEN` is a fine-grained token with read access to the contents of `raucheacho/vectixdb`. From a checkout, check out both repositories side by side, install Zig (`mlugg/setup-zig@v2`, version 0.16.0) and run `./vectixdb/scripts/go-libs.sh` before the tests.

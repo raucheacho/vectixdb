@@ -2,17 +2,13 @@
 // engine: vectors (HNSW), full text (BM25), exact substring and typed
 // metadata filters, in one library with crash-safe storage.
 //
-// The static library must be built first (scripts/go-libs.sh). A DB is safe
+// The static library comes with the module in release versions; in a
+// checkout of the repository, build it with scripts/go-libs.sh. A DB is safe
 // for concurrent use.
 package vectixdb
 
 /*
-#cgo CFLAGS: -I${SRCDIR}/../../include
-#cgo darwin,arm64 LDFLAGS: ${SRCDIR}/lib/darwin_arm64/lib/libvectixdb.a
-#cgo darwin,amd64 LDFLAGS: ${SRCDIR}/lib/darwin_amd64/lib/libvectixdb.a
-#cgo linux,amd64 LDFLAGS: ${SRCDIR}/lib/linux_amd64/lib/libvectixdb.a -lm
-#cgo linux,arm64 LDFLAGS: ${SRCDIR}/lib/linux_arm64/lib/libvectixdb.a -lm
-#cgo windows,amd64 LDFLAGS: ${SRCDIR}/lib/windows_amd64/lib/vectixdb.lib
+#cgo CFLAGS: -I${SRCDIR}/include
 #include <stdlib.h>
 #include "vectixdb.h"
 */

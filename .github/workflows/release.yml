@@ -1,0 +1,99 @@
+name: Release
+
+# Pushing a tag v<version> (equal to build.zig.zon's version):
+#   1. builds the C archives of every platform (scripts/dist.sh);
+#   2. checks them on Linux and macOS: a C program linked statically and
+#      dynamically, and the CLI;
+#   3. tags the Go module with its prebuilt libraries (scripts/release-go.sh)
+#      and drafts the GitHub release with the archives.
+# Publish the draft by hand after checking it.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+      - name: Unit and crash tests
+        run: zig build test -Drelease --summary all
+      - run: ./scripts/dist.sh "$GITHUB_REF_NAME"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  check:
+    needs: build
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-amd64
+            libs: -lpthread -lm
+            rpath: -Wl,-rpath,
+          - os: ubuntu-24.04-arm
+            platform: linux-arm64
+            libs: -lpthread -lm
+            rpath: -Wl,-rpath,
+          - os: macos-latest
+            platform: darwin-arm64
+            libs: ''
+            rpath: -Wl,-rpath,
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: Link a C program against the archive
+        run: |
+          name="vectixdb-${GITHUB_REF_NAME#v}-${{ matrix.platform }}"
+          tar -xzf "dist/$name.tar.gz"
+          p="$PWD/$name"
+          cc -std=c99 tests/c/smoke.c -I"$p/include" "$p/lib/libvectixdb.a" ${{ matrix.libs }} -o smoke-static
+          ./smoke-static "$RUNNER_TEMP/db-static"
+          cc -std=c99 tests/c/smoke.c -I"$p/include" -L"$p/lib" -lvectixdb ${{ matrix.rpath }}"$p/lib" -o smoke-shared
+          ./smoke-shared "$RUNNER_TEMP/db-shared"
+          "$p/bin/vectix" 2>&1 | grep -q usage
+
+  publish:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: Tag the Go module with its prebuilt libraries
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          version="${GITHUB_REF_NAME#v}"
+          ./scripts/release-go.sh "$version"
+          git push origin $(git tag --points-at "bindings/go/v$version^{commit}")
+      - name: Draft the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease=
+          case "$GITHUB_REF_NAME" in *-*) prerelease=--prerelease ;; esac
+          gh release create "$GITHUB_REF_NAME" --draft --generate-notes $prerelease \
+            dist/*.tar.gz dist/SHA256SUMS

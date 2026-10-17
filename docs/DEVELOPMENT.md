@@ -16,7 +16,9 @@ How the engine is built, what must stay true, how to test a change and what come
 | `zig build c-test` | Builds and runs `tests/c/smoke.c` with `-Werror` |
 | `zig build -Drelease` | Library, header and `vectix` into `zig-out/` |
 | `zig build run -- info <dir>` | Runs the CLI |
-| `./scripts/go-libs.sh [platforms]` | Static libraries for the Go binding |
+| `./scripts/go-libs.sh [platforms\|all]` | Static libraries of the Go binding, into `bindings/go/lib/<platform>/` (`STRIP=1` as in releases) |
+| `./scripts/dist.sh <version> [platforms]` | Release archives of the C library and the CLI, into `dist/` |
+| `./scripts/release-go.sh <version>` | Release commit with the Go libraries, and its tags (local; the release workflow pushes them) |
 
 The build uses `preferred_optimize_mode = ReleaseSafe`, so the option is `-Drelease`; `-Doptimize=` is rejected.
 
@@ -50,10 +52,11 @@ src/
   db.zig          the database: open/recovery, write path, checkpoint, compaction, orphans
   c_api.zig       the exported C functions (contract: include/vectixdb.h)
   cli.zig         the `vectix` tool
-bindings/go/      cgo wrapper (vectixdb.go, filter.go) and its tests
+bindings/go/      cgo wrapper (vectixdb.go, filter.go), its tests, a copy of the header (include/)
+                  and one module per platform for the static library (lib/<goos>_<goarch>/)
 tests/c/smoke.c   C program against the header
 bench/            zvec_bench.py: runs Zvec on the same data as `vectix bench`
-scripts/          go-libs.sh: per-platform static libraries
+scripts/          platform.sh (Zig targets), go-libs.sh, dist.sh, release-go.sh
 ```
 
 ### The write path (`db.zig`)
@@ -153,6 +156,14 @@ docker run --rm -v "$PWD":/src -w /src/bindings/go golang:1.24-bookworm go test 
 docker run --rm --platform linux/amd64 -v "$PWD":/src -w /src/bindings/go golang:1.24-bookworm go test ./...
 ```
 
+The release archives, as the release workflow checks them (here on macOS; on Linux add `-lpthread -lm` after the archive):
+
+```sh
+./scripts/dist.sh "$(sed -n 's/^ *\.version = "\(.*\)",/\1/p' build.zig.zon)" darwin_arm64
+tar -xzf dist/vectixdb-*-darwin-arm64.tar.gz -C /tmp && p=$(echo /tmp/vectixdb-*-darwin-arm64)
+cc -std=c99 tests/c/smoke.c -I"$p/include" "$p/lib/libvectixdb.a" -o /tmp/smoke && /tmp/smoke /tmp/smoke-db
+```
+
 The last two catch link problems that only show with gcc (the missing compiler runtime was found this way).
 
 ### Benchmarks
@@ -197,16 +208,21 @@ Every file starts with a magic and a `u32` version. Until 1.0, a new version may
 [.github/workflows/ci.yml](../.github/workflows/ci.yml):
 - tests, C test and Go binding on Linux x86-64, Linux arm64 and macOS;
 - ThreadSanitizer on Linux;
-- the static libraries for every Go platform.
+- the release artifacts for every platform: Go libraries and C archives, and the check that the binding's header copy matches `include/vectixdb.h`.
 
 ## Release checklist
 
 1. `zig build test -Drelease`, `zig build c-test` and the Go tests pass. CI is green, ThreadSanitizer included.
 2. After durability changes, the mutation table above was re-checked.
-3. Bump the version in `build.zig.zon` and in `vtx_version`.
-4. Add a CHANGELOG entry: format versions, API changes, migration notes.
-5. Tag `vX.Y.Z`.
-6. Attach the per-platform libraries (`scripts/go-libs.sh` for all platforms) to the release, so applications do not need Zig.
+3. Bump the version in `build.zig.zon` and in `src/root.zig` (`vtx_version`); `scripts/dist.sh` refuses a tag that differs from either.
+4. A change to `include/vectixdb.h` is copied to `bindings/go/include/vectixdb.h` (CI checks it).
+5. Add a CHANGELOG entry: format versions, API changes, migration notes.
+6. Push the tag: `git tag vX.Y.Z && git push origin vX.Y.Z`. [release.yml](../.github/workflows/release.yml) then:
+   - builds the archives of every platform and runs the tests;
+   - links a C program statically and dynamically against each archive and runs the CLI, on Linux x86-64, Linux arm64 and macOS;
+   - runs `scripts/release-go.sh`, which commits the four Go libraries outside any branch, and pushes the tags `bindings/go/vX.Y.Z` and `bindings/go/lib/<platform>/vX.Y.Z`;
+   - drafts the GitHub release with the archives and `SHA256SUMS`.
+7. Read the draft and publish it. Check `go get github.com/raucheacho/vectixdb/bindings/go@vX.Y.Z` from an empty module.
 
 ## Roadmap
 
@@ -224,4 +240,3 @@ In rough order of value:
 | Stemming as an option | `manger` and `mange` do not match today | Per field, off by default for predictability |
 | Read snapshots while writing | Readers without blocking the writer | v2 |
 | Windows | Does not compile: `src/fs.zig` assumes integer file handles, the CLI uses `getrusage` | The fix is small; the work is validating crash safety (atomic replace, directory sync, the lock) on a Windows CI runner |
-| Published release artifacts | Applications without Zig | See release checklist |
