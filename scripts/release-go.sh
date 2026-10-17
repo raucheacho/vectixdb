@@ -21,6 +21,7 @@ cmp -s include/vectixdb.h bindings/go/include/vectixdb.h || { echo "bindings/go/
 
 STRIP=1 ./scripts/go-libs.sh all
 
+start=$(git symbolic-ref -q --short HEAD || git rev-parse HEAD)
 git checkout -q --detach
 sed -i.bak "s#^\(	github.com/raucheacho/vectixdb/bindings/go/lib/[a-z0-9_]*\) v0.0.0#\1 v$version#" bindings/go/go.mod
 rm -f bindings/go/go.mod.bak
@@ -37,6 +38,6 @@ done
 for t in $tags; do
     git tag -a "$t" -m "VectixDB $version" HEAD
 done
-git checkout -q -
+git checkout -q "$start"
 echo "release commit $(git rev-parse --short "bindings/go/v$version^{commit}"), tags:"
 for t in $tags; do echo "  $t"; done
