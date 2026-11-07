@@ -52,8 +52,6 @@ Releases need no Zig. Platforms: macOS 13+ (arm64, x86-64), Linux with glibc 2.2
 
   See [docs/INTEGRATION.md](docs/INTEGRATION.md#building-and-shipping).
 
-While the repository is private, download with `gh release download v0.1.0 -R raucheacho/vectixdb`, and give Go access as described in [docs/GO.md](docs/GO.md#installing).
-
 ## Building from source
 
 Requirements: [Zig 0.16](https://ziglang.org/download/).

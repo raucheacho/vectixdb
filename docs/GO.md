@@ -10,13 +10,6 @@ go get github.com/raucheacho/vectixdb/bindings/go@v0.1.0
 
 Releases carry the prebuilt static library of every supported platform, so a build needs a C compiler for cgo but not Zig. Supported: `darwin_arm64`, `darwin_amd64` (macOS 13+), `linux_amd64`, `linux_arm64` (glibc). Windows is not supported yet.
 
-While the repository is private, tell Go to fetch it directly with your git credentials:
-
-```sh
-go env -w GOPRIVATE=github.com/raucheacho/*
-git config --global url."git@github.com:".insteadOf "https://github.com/"   # or a token in ~/.netrc
-```
-
 ### How the module is laid out
 
 - **The header** is in the module (`bindings/go/include/vectixdb.h`), a copy of `include/vectixdb.h` that CI keeps identical.
@@ -135,19 +128,17 @@ FROM debian:bookworm-slim
 COPY --from=build /out/app /usr/local/bin/app
 ```
 
-While the repository is private, `go mod download` needs credentials in the image: pass a token as a build secret rather than an argument. From a checkout instead, pass it as a named build context (`docker build --build-context vectixdb=../vectixdb`) and build the library in the image with Zig: Lorag's [Dockerfile](https://github.com/raucheacho/lorag/blob/main/Dockerfile) does this.
+To build from a checkout instead, pass it as a named build context (`docker build --build-context vectixdb=../vectixdb`) and build the library in the image with Zig (`scripts/go-libs.sh`).
 
 ## CI
 
-With a released version, a CI job needs Go only. While the repository is private, give it read access:
+With a released version, a CI job needs Go only:
 
 ```yaml
 - uses: actions/checkout@v4
 - uses: actions/setup-go@v5
   with: { go-version-file: go.mod }
-- run: git config --global url."https://x-access-token:${{ secrets.VECTIXDB_TOKEN }}@github.com/".insteadOf "https://github.com/"
 - run: go test -race ./...
-  env: { GOPRIVATE: github.com/raucheacho/* }
 ```
 
-`VECTIXDB_TOKEN` is a fine-grained token with read access to the contents of `raucheacho/vectixdb`. From a checkout, check out both repositories side by side, install Zig (`mlugg/setup-zig@v2`, version 0.16.0) and run `./vectixdb/scripts/go-libs.sh` before the tests.
+From a checkout, check out both repositories side by side, install Zig (`mlugg/setup-zig@v2`, version 0.16.0) and run `./vectixdb/scripts/go-libs.sh` before the tests.

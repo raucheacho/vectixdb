@@ -178,7 +178,7 @@ There is no stemming: `manger` does not match `mange`. Hybrid queries cover that
 
 ## Changing the embedding model or the schema
 
-A collection cannot change its vector space or its fields. Use generations of collections and a pointer document; this is what Lorag does in production.
+A collection cannot change its vector space or its fields. Use generations of collections and a pointer document; this is what Lorag does.
 
 1. Keep a small collection, for example `meta`, with one document per subsystem: `{active: "chunks_3", config: "<fingerprint>"}`. The fingerprint lists everything baked into the collection: model name, dimension, metric, quantization, HNSW parameters, field layout version.
 2. At startup, compare the stored fingerprint with the current configuration. If it differs, create `chunks_4`.
